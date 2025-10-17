@@ -45,8 +45,15 @@ const normalizeScopes = (value?: string): string[] => {
 };
 
 const ensureUrl = (value: string, fieldName: string): string => {
+  const trimmed = value.trim();
   try {
-    return new URL(value).toString();
+    // Parse to validate but return the caller-provided representation so token claims match exactly.
+    // URL constructor throws on invalid inputs (missing protocol, hostname, etc.).
+    const url = new URL(trimmed);
+    if (!url.protocol || !url.hostname) {
+      throw new Error("URL must include protocol and hostname");
+    }
+    return trimmed;
   } catch (error) {
     throw new OAuthError(`Invalid URL for ${fieldName}: ${value}`, "configuration", error);
   }
