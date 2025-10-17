@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { decodeJwt } from "jose";
 import { z } from "zod";
 import {
   buildBearerChallenge,
@@ -119,6 +120,15 @@ const server = new McpServer({
   version: "0.1.0"
 });
 
+const summarizeToken = (token: string): string => {
+  if (!token) {
+    return "<empty>";
+  }
+  const lead = token.slice(0, 12);
+  const tail = token.slice(-8);
+  return `${lead}…${tail}`;
+};
+
 const loadWidgetTemplate = (): string => {
   const widgetPath = path.join(WEB_DIR, "neonvideo-widget.html");
   try {
@@ -155,6 +165,13 @@ const oauthConfig = (() => {
 const oauthEnabled = oauthConfig !== null;
 const oauthMetadataUrl = oauthConfig ? getProtectedResourceMetadataUrl(oauthConfig) : undefined;
 const oauthMetadata = oauthConfig ? getProtectedResourceMetadata(oauthConfig) : null;
+
+if (oauthConfig) {
+  console.log(
+    `[${APP_NAME}] Loaded OAuth config issuer=${oauthConfig.issuer} resource=${oauthConfig.resourceIndicator} audience=${oauthConfig.audience ?? "<default>"}`
+  );
+  console.log(`[${APP_NAME}] OAuth JWKS URL: ${oauthConfig.jwksUri}`);
+}
 
 const buildChallenge = (options?: { error?: string; description?: string }) => {
   if (!oauthConfig) {
@@ -253,6 +270,11 @@ const oauthMiddleware: RequestHandler = async (req: Request, res: Response, next
   }
 
   const authorization = req.headers.authorization;
+  console.debug(
+    `[${APP_NAME}] OAuth middleware processing ${req.method} ${req.originalUrl} (auth header present: ${Boolean(
+      authorization
+    )})`
+  );
   if (!authorization) {
     respondUnauthorized(res, {
       error: "invalid_request",
@@ -285,6 +307,24 @@ const oauthMiddleware: RequestHandler = async (req: Request, res: Response, next
     return next();
   } catch (error) {
     if (error instanceof OAuthError) {
+      if (error.code === "invalid_token") {
+        const tokenPreview = summarizeToken(token);
+        try {
+          const decoded = decodeJwt(token);
+          console.warn(
+            `[${APP_NAME}] OAuth verification failed: ${error.message}; token=${tokenPreview}; iss=${decoded.iss}; aud=${JSON.stringify(
+              decoded.aud ?? null
+            )}; exp=${decoded.exp}`
+          );
+        } catch (decodeError) {
+          console.warn(
+            `[${APP_NAME}] OAuth verification failed: ${error.message}; token=${tokenPreview}; unable to decode JWT`,
+            decodeError
+          );
+        }
+      } else {
+        console.warn(`[${APP_NAME}] OAuth verification failed: ${error.message}`);
+      }
       const challengeError =
         error.code === "missing_token"
           ? "invalid_request"
