@@ -270,10 +270,10 @@ const oauthMiddleware: RequestHandler = async (req: Request, res: Response, next
   }
 
   const authorization = req.headers.authorization;
-  console.debug(
-    `[${APP_NAME}] OAuth middleware processing ${req.method} ${req.originalUrl} (auth header present: ${Boolean(
-      authorization
-    )})`
+  console.log(
+    `[${APP_NAME}] OAuth middleware processing ${req.method} ${req.originalUrl} (auth header present: ${
+      Boolean(authorization)
+    })`
   );
   if (!authorization) {
     respondUnauthorized(res, {
@@ -303,6 +303,11 @@ const oauthMiddleware: RequestHandler = async (req: Request, res: Response, next
 
   try {
     const authInfo = await verifyAccessToken(token, oauthConfig);
+    console.log(
+      `[${APP_NAME}] OAuth token verified for client=${authInfo.clientId} scopes=${authInfo.scopes.join(
+        " "
+      )} expiresAt=${authInfo.expiresAt ?? "<undefined>"}`
+    );
     req.auth = authInfo;
     return next();
   } catch (error) {
