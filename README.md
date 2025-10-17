@@ -1,7 +1,7 @@
 # NeonVideo.AI ChatGPT App
 
 NeonVideo.AI is a ChatGPT app that lets users launch NeonVideo music-video jobs and watch the results without leaving the conversation. It uses the Apps SDK conventions from `APPS_SDK.md`, the MCP TypeScript server patterns from `MCP_TS_SDK.md`, and the external API contract in `API_DOC.md`.
-
+ 
 ## Project layout
 
 - `src/server.ts` &mdash; MCP server that exposes the `neonvideo_action` tool and serves the widget resource.
