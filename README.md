@@ -20,7 +20,7 @@ NeonVideo.AI is a ChatGPT app that lets users launch NeonVideo music-video jobs 
 ```bash
 npm install
 ```
-
+ 
 ## Configuration
 
 Set the following environment variables before starting the server:
