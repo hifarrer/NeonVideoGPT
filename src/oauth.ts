@@ -46,17 +46,25 @@ const normalizeScopes = (value?: string): string[] => {
 
 const ensureUrl = (value: string, fieldName: string): string => {
   const trimmed = value.trim();
+  let url: URL;
   try {
-    // Parse to validate but return the caller-provided representation so token claims match exactly.
-    // URL constructor throws on invalid inputs (missing protocol, hostname, etc.).
-    const url = new URL(trimmed);
-    if (!url.protocol || !url.hostname) {
-      throw new Error("URL must include protocol and hostname");
-    }
-    return trimmed;
+    // Parse to validate the structure (throws on missing protocol/hostname, etc.)
+    url = new URL(trimmed);
   } catch (error) {
     throw new OAuthError(`Invalid URL for ${fieldName}: ${value}`, "configuration", error);
   }
+
+  // Keep the original representation so tokens can match string-literal claims,
+  // but normalize to strip a trailing slash when there is no explicit pathname.
+  if (url.pathname === "/" && !url.search && !url.hash) {
+    return trimmed.replace(/\/+$/, "");
+  }
+
+  if (!url.protocol || !url.hostname) {
+    throw new OAuthError(`Invalid URL for ${fieldName}: ${value}`, "configuration");
+  }
+
+  return trimmed;
 };
 
 const resolveJwksUri = (issuer: string, override?: string): string => {
