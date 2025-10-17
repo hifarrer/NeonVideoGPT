@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        background: transparent;
+        color: inherit;
+      }
+
+      .nv-app {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .nv-card {
+        border-radius: 16px;
+        border: 1px solid rgba(120, 120, 120, 0.25);
+        background: linear-gradient(135deg, rgba(16, 24, 48, 0.45), rgba(32, 10, 45, 0.6));
+        box-shadow: 0 10px 30px rgba(10, 14, 31, 0.25);
+        padding: 16px;
+        backdrop-filter: blur(12px);
+      }
+
+      @media (prefers-color-scheme: light) {
+        .nv-card {
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(240, 248, 255, 0.9));
+          border-color: rgba(71, 85, 105, 0.2);
+          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
+        }
+      }
+
+      .nv-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .nv-title {
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .nv-actions {
+        display: grid;
+        gap: 12px;
+      }
+
+      .nv-label {
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+
+      textarea,
+      input {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background: rgba(15, 23, 42, 0.35);
+        color: inherit;
+        font: inherit;
+        padding: 10px 12px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      @media (prefers-color-scheme: light) {
+        textarea,
+        input {
+          background: rgba(255, 255, 255, 0.9);
+        }
+      }
+
+      textarea:focus,
+      input:focus {
+        outline: none;
+        border-color: #38bdf8;
+        box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+      }
+
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+
+      button {
+        border: none;
+        border-radius: 999px;
+        padding: 10px 20px;
+        font-weight: 600;
+        cursor: pointer;
+        background: linear-gradient(135deg, #22d3ee, #6366f1);
+        color: #0f172a;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+      }
+
+      button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+      }
+
+      button:disabled {
+        cursor: progress;
+        opacity: 0.6;
+      }
+
+      .nv-status-list,
+      .nv-command-list {
+        display: grid;
+        gap: 8px;
+        padding: 0;
+        margin: 0;
+        list-style: none;
+      }
+
+      .nv-command-item {
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: rgba(15, 23, 42, 0.35);
+      }
+
+      .nv-command-syntax {
+        font-family: "JetBrains Mono", "Fira Code", monospace;
+        font-size: 12px;
+        color: #38bdf8;
+        margin-bottom: 4px;
+        word-break: break-word;
+      }
+
+      .nv-note {
+        font-size: 12px;
+        opacity: 0.8;
+      }
+
+      .nv-section-title {
+        font-size: 14px;
+        font-weight: 700;
+        margin-bottom: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #38bdf8;
+      }
+
+      .nv-status-grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .nv-group {
+        display: grid;
+        gap: 6px;
+      }
+
+      .nv-highlight {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 6px 12px;
+        background: rgba(34, 211, 238, 0.15);
+        color: #38bdf8;
+        font-size: 12px;
+        font-weight: 600;
+        width: max-content;
+      }
+
+      @media (prefers-color-scheme: light) {
+        .nv-command-item {
+          background: rgba(255, 255, 255, 0.9);
+        }
+        .nv-highlight {
+          background: rgba(14, 165, 233, 0.12);
+        }
+      }
+
+      .nv-media {
+        display: grid;
+        gap: 12px;
+      }
+
+      .nv-video,
+      .nv-audio,
+      .nv-scene-image {
+        width: 100%;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.4);
+      }
+
+      .nv-scene-grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .nv-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .nv-chip {
+        border-radius: 999px;
+        padding: 4px 10px;
+        background: rgba(99, 102, 241, 0.2);
+        font-size: 12px;
+      }
+
+      .nv-error {
+        color: #fca5a5;
+        font-size: 13px;
+      }
+
+      details {
+        background: rgba(15, 23, 42, 0.35);
+        border-radius: 12px;
+        padding: 8px 12px;
+      }
+
+      details[open] {
+        padding-bottom: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="neonvideo-root"></div>
+    <script type="module">
+      const openai = window.openai ?? {};
+      const root = document.getElementById("neonvideo-root");
+
+      const defaultWidgetState = {
+        lastPrompt: "",
+        lastProjectId: ""
+      };
+
+      const state = {
+        toolOutput: openai.toolOutput ?? null,
+        widgetState: { ...defaultWidgetState, ...(openai.widgetState ?? {}) },
+        pendingAction: null,
+        authToken: "",
+        localError: null
+      };
+
+      const setWidgetState = (next) => {
+        state.widgetState = { ...state.widgetState, ...next };
+        openai.setWidgetState?.(state.widgetState);
+      };
+
+      const setToolOutput = (next) => {
+        state.toolOutput = next ?? null;
+        if (next?.view === "status" && state.widgetState.lastProjectId !== next.projectId) {
+          state.widgetState = { ...state.widgetState, lastProjectId: next.projectId };
+          openai.setWidgetState?.(state.widgetState);
+        }
+        render();
+      };
+
+      const setPending = (action) => {
+        state.pendingAction = action;
+        render();
+      };
+
+      const clearLocalError = () => {
+        state.localError = null;
+      };
+
+      const formatTimestamp = (timestamp) => {
+        try {
+          return new Date(timestamp).toLocaleString();
+        } catch (_error) {
+          return timestamp;
+        }
+      };
+
+      const handleGenerate = async (prompt) => {
+        clearLocalError();
+        setPending("generate");
+        try {
+          const response = await openai.callTool?.("neonvideo_action", {
+            action: "generate_video",
+            prompt,
+            authToken: state.authToken || undefined
+          });
+
+          if (response?.structuredContent) {
+            setToolOutput(response.structuredContent);
+          }
+        } catch (error) {
+          state.localError = error instanceof Error ? error.message : String(error);
+        } finally {
+          setPending(null);
+          render();
+        }
+      };
+
+      const handleStatusCheck = async (projectId) => {
+        clearLocalError();
+        setPending("check");
+        try {
+          const response = await openai.callTool?.("neonvideo_action", {
+            action: "check_status",
+            projectId,
+            authToken: state.authToken || undefined
+          });
+
+          if (response?.structuredContent) {
+            setToolOutput(response.structuredContent);
+          }
+        } catch (error) {
+          state.localError = error instanceof Error ? error.message : String(error);
+        } finally {
+          setPending(null);
+          render();
+        }
+      };
+
+      const renderHelp = (content) => {
+        const section = document.createElement("section");
+        section.className = "nv-card";
+        const title = document.createElement("div");
+        title.className = "nv-section-title";
+        title.textContent = content.title ?? "Commands";
+        section.appendChild(title);
+
+        const list = document.createElement("ul");
+        list.className = "nv-command-list";
+        (content.commands ?? []).forEach((command) => {
+          const item = document.createElement("li");
+          item.className = "nv-command-item";
+          const syntax = document.createElement("div");
+          syntax.className = "nv-command-syntax";
+          syntax.textContent = command.syntax;
+          const description = document.createElement("div");
+          description.className = "nv-note";
+          description.textContent = command.description;
+          item.append(syntax, description);
+          list.appendChild(item);
+        });
+        section.appendChild(list);
+
+        if (content.usageNotes?.length) {
+          const notes = document.createElement("div");
+          notes.className = "nv-note";
+          notes.style.marginTop = "12px";
+          notes.textContent = content.usageNotes.join(" • ");
+          section.appendChild(notes);
+        }
+
+        const updated = document.createElement("div");
+        updated.className = "nv-note";
+        updated.style.marginTop = "10px";
+        updated.textContent = `Updated ${formatTimestamp(content.timestamp)}`;
+        section.appendChild(updated);
+
+        return section;
+      };
+
+      const renderStatus = (content) => {
+        const section = document.createElement("section");
+        section.className = "nv-card";
+        const title = document.createElement("div");
+        title.className = "nv-section-title";
+        title.textContent = "Generation status";
+        section.appendChild(title);
+
+        const statusGrid = document.createElement("div");
+        statusGrid.className = "nv-status-grid";
+
+        const headline = document.createElement("div");
+        headline.className = "nv-highlight";
+        headline.textContent =
+          content.status === "complete"
+            ? "✅ Completed"
+            : content.status === "error"
+            ? "⚠️ Error"
+            : content.status === "queued"
+            ? "⏳ Queued"
+            : "🎬 Generating";
+        statusGrid.appendChild(headline);
+
+        const project = document.createElement("div");
+        project.className = "nv-group";
+        const projectId = document.createElement("div");
+        projectId.innerHTML = `<strong>Project ID:</strong> ${content.projectId}`;
+        const prompt = document.createElement("div");
+        prompt.innerHTML = `<strong>Prompt:</strong> ${content.prompt}`;
+        const message = document.createElement("div");
+        message.innerHTML = `<strong>Message:</strong> ${content.message}`;
+        project.append(projectId, prompt, message);
+        statusGrid.appendChild(project);
+
+        const timing = document.createElement("div");
+        timing.className = "nv-note";
+        timing.textContent = `Last checked ${formatTimestamp(content.checkedAt)} • Poll at ${content.pollUrl}`;
+        statusGrid.appendChild(timing);
+
+        if (typeof content.creditsRequired === "number" || typeof content.creditsRemaining === "number") {
+          const creditsRow = document.createElement("div");
+          creditsRow.className = "nv-chip-row";
+          if (typeof content.creditsRequired === "number") {
+            const required = document.createElement("span");
+            required.className = "nv-chip";
+            required.textContent = `Requires ~${content.creditsRequired} credits`;
+            creditsRow.appendChild(required);
+          }
+          if (typeof content.creditsRemaining === "number") {
+            const remaining = document.createElement("span");
+            remaining.className = "nv-chip";
+            remaining.textContent = `${content.creditsRemaining} credits remaining`;
+            creditsRow.appendChild(remaining);
+          }
+          statusGrid.appendChild(creditsRow);
+        }
+
+        if (content.error) {
+          const error = document.createElement("div");
+          error.className = "nv-error";
+          error.textContent = `${content.error.type}: ${content.error.message}`;
+          statusGrid.appendChild(error);
+        }
+
+        if (content.finalVideoUrl || content.audioUrl || (content.sceneImages && content.sceneImages.length)) {
+          const media = document.createElement("div");
+          media.className = "nv-media";
+          if (content.finalVideoUrl) {
+            const video = document.createElement("video");
+            video.className = "nv-video";
+            video.controls = true;
+            video.src = content.finalVideoUrl;
+            video.playsInline = true;
+            video.poster = content.sceneImages?.[0] ?? "";
+            media.appendChild(video);
+          }
+          if (content.audioUrl) {
+            const audio = document.createElement("audio");
+            audio.className = "nv-audio";
+            audio.controls = true;
+            audio.src = content.audioUrl;
+            media.appendChild(audio);
+          }
+          if (content.sceneImages?.length) {
+            const scenes = document.createElement("div");
+            scenes.className = "nv-scene-grid";
+            content.sceneImages.forEach((src, index) => {
+              const wrapper = document.createElement("div");
+              wrapper.className = "nv-card";
+              wrapper.style.padding = "8px";
+              wrapper.style.background = "rgba(15, 23, 42, 0.45)";
+              const img = document.createElement("img");
+              img.className = "nv-scene-image";
+              img.src = src;
+              img.alt = `Scene ${index + 1}`;
+              img.loading = "lazy";
+              img.style.display = "block";
+              const caption = document.createElement("div");
+              caption.className = "nv-note";
+              caption.style.marginTop = "6px";
+              caption.textContent = content.scenePrompts?.[index] ?? `Scene ${index + 1}`;
+              wrapper.append(img, caption);
+              scenes.appendChild(wrapper);
+            });
+            media.appendChild(scenes);
+          }
+          statusGrid.appendChild(media);
+        }
+
+        const refreshRow = document.createElement("div");
+        refreshRow.style.display = "flex";
+        refreshRow.style.gap = "8px";
+        const refreshButton = document.createElement("button");
+        refreshButton.textContent = "Refresh status";
+        refreshButton.type = "button";
+        refreshButton.disabled = state.pendingAction === "check";
+        refreshButton.addEventListener("click", () => handleStatusCheck(content.projectId));
+        refreshRow.appendChild(refreshButton);
+
+        const openLink = document.createElement("a");
+        openLink.href = `https://neonvideo.ai/projects/${encodeURIComponent(content.projectId)}`;
+        openLink.target = "_blank";
+        openLink.rel = "noopener noreferrer";
+        openLink.textContent = "View on NeonVideo.ai";
+        openLink.className = "nv-note";
+        refreshRow.appendChild(openLink);
+
+        statusGrid.appendChild(refreshRow);
+
+        section.appendChild(statusGrid);
+        return section;
+      };
+
+      const renderError = (content) => {
+        const section = document.createElement("section");
+        section.className = "nv-card";
+        const title = document.createElement("div");
+        title.className = "nv-section-title";
+        title.textContent = "Something went wrong";
+        section.appendChild(title);
+
+        const message = document.createElement("div");
+        message.className = "nv-error";
+        message.textContent = `${content.error.type}: ${content.error.message}`;
+        section.appendChild(message);
+
+        if (content.error.details) {
+          const details = document.createElement("pre");
+          details.className = "nv-note";
+          details.textContent = content.error.details;
+          details.style.whiteSpace = "pre-wrap";
+          details.style.marginTop = "10px";
+          section.appendChild(details);
+        }
+
+        const timestamp = document.createElement("div");
+        timestamp.className = "nv-note";
+        timestamp.style.marginTop = "8px";
+        timestamp.textContent = `Occurred ${formatTimestamp(content.timestamp)}`;
+        section.appendChild(timestamp);
+
+        return section;
+      };
+
+      const renderOutput = () => {
+        if (!state.toolOutput) {
+          return null;
+        }
+        switch (state.toolOutput.view) {
+          case "help":
+            return renderHelp(state.toolOutput);
+          case "status":
+            return renderStatus(state.toolOutput);
+          case "error":
+            return renderError(state.toolOutput);
+          default: {
+            const fallback = document.createElement("section");
+            fallback.className = "nv-card";
+            fallback.textContent = "Received an unsupported response from NeonVideo.AI.";
+            return fallback;
+          }
+        }
+      };
+
+      const render = () => {
+        if (!root) return;
+        root.innerHTML = "";
+        const container = document.createElement("div");
+        container.className = "nv-app";
+
+        const header = document.createElement("div");
+        header.className = "nv-card nv-header";
+        const title = document.createElement("div");
+        title.className = "nv-title";
+        title.textContent = "NeonVideo.AI";
+        const subtitle = document.createElement("div");
+        subtitle.className = "nv-note";
+        subtitle.textContent = "Generate AI music videos and watch them without leaving ChatGPT.";
+        header.append(title, subtitle);
+        container.appendChild(header);
+
+        const actionsCard = document.createElement("section");
+        actionsCard.className = "nv-card";
+        const actionsTitle = document.createElement("div");
+        actionsTitle.className = "nv-section-title";
+        actionsTitle.textContent = "Launch from ChatGPT";
+        actionsCard.appendChild(actionsTitle);
+
+        const actions = document.createElement("div");
+        actions.className = "nv-actions";
+
+        const generateForm = document.createElement("form");
+        generateForm.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const prompt = state.widgetState.lastPrompt.trim();
+          if (!prompt) {
+            state.localError = "Describe the music video before starting generation.";
+            render();
+            return;
+          }
+          handleGenerate(prompt);
+        });
+
+        const promptLabel = document.createElement("label");
+        promptLabel.className = "nv-label";
+        promptLabel.textContent = "Describe your music video";
+
+        const promptTextarea = document.createElement("textarea");
+        promptTextarea.placeholder = "Example: Make a music video about a cowboy cat living on a farm.";
+        promptTextarea.value = state.widgetState.lastPrompt ?? "";
+        promptTextarea.addEventListener("input", (event) => {
+          const value = event.target.value;
+          setWidgetState({ lastPrompt: value });
+        });
+
+        const startButton = document.createElement("button");
+        startButton.type = "submit";
+        startButton.textContent =
+          state.pendingAction === "generate" ? "Starting NeonVideo…" : "Start music video";
+        startButton.disabled = state.pendingAction === "generate";
+
+        generateForm.append(promptLabel, promptTextarea, startButton);
+        actions.appendChild(generateForm);
+
+        const statusForm = document.createElement("form");
+        statusForm.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const projectId = state.widgetState.lastProjectId.trim();
+          if (!projectId) {
+            state.localError = "Enter a project ID to check status.";
+            render();
+            return;
+          }
+          handleStatusCheck(projectId);
+        });
+
+        const statusLabel = document.createElement("label");
+        statusLabel.className = "nv-label";
+        statusLabel.textContent = "Check an existing project";
+
+        const projectInput = document.createElement("input");
+        projectInput.type = "text";
+        projectInput.placeholder = "Project ID (UUID)";
+        const currentProjectId =
+          state.toolOutput?.view === "status" ? state.toolOutput.projectId : state.widgetState.lastProjectId ?? "";
+        projectInput.value = currentProjectId;
+        projectInput.addEventListener("input", (event) => {
+          const value = event.target.value;
+          setWidgetState({ lastProjectId: value });
+        });
+
+        const checkButton = document.createElement("button");
+        checkButton.type = "submit";
+        checkButton.textContent = state.pendingAction === "check" ? "Refreshing…" : "Check status";
+        checkButton.disabled = state.pendingAction === "check";
+
+        statusForm.append(statusLabel, projectInput, checkButton);
+        actions.appendChild(statusForm);
+
+        const authDetails = document.createElement("details");
+        const summary = document.createElement("summary");
+        summary.textContent = "Need to use a different auth token?";
+        authDetails.appendChild(summary);
+        const authCopy = document.createElement("div");
+        authCopy.className = "nv-note";
+        authCopy.style.margin = "8px 0";
+        authCopy.textContent =
+          "Paste a temporary NeonVideo auth token below to override the server default for this session.";
+        const authInput = document.createElement("input");
+        authInput.type = "password";
+        authInput.placeholder = "Bearer token (kept only in this view)";
+        authInput.value = state.authToken;
+        authInput.addEventListener("input", (event) => {
+          state.authToken = event.target.value.trim();
+        });
+        authDetails.append(authCopy, authInput);
+        actions.appendChild(authDetails);
+
+        actionsCard.appendChild(actions);
+        container.appendChild(actionsCard);
+
+        if (state.localError) {
+          const localError = document.createElement("div");
+          localError.className = "nv-error";
+          localError.textContent = state.localError;
+          container.appendChild(localError);
+        }
+
+        const outputSection = renderOutput();
+        if (outputSection) {
+          container.appendChild(outputSection);
+        } else {
+          const placeholder = document.createElement("section");
+          placeholder.className = "nv-card";
+          const placeholderTitle = document.createElement("div");
+          placeholderTitle.className = "nv-section-title";
+          placeholderTitle.textContent = "Try it out";
+          const placeholderBody = document.createElement("div");
+          placeholderBody.className = "nv-note";
+          placeholderBody.textContent =
+            "Mention @NeonVideo with a detailed brief to start generating a music video.";
+          placeholder.append(placeholderTitle, placeholderBody);
+          container.appendChild(placeholder);
+        }
+
+        root.appendChild(container);
+      };
+
+      render();
+
+      window.addEventListener("openai:set_globals", (event) => {
+        const globals = event?.detail?.globals ?? {};
+        if (Object.prototype.hasOwnProperty.call(globals, "toolOutput")) {
+          setToolOutput(globals.toolOutput);
+        }
+        if (globals.widgetState) {
+          state.widgetState = { ...state.widgetState, ...globals.widgetState };
+          render();
+        }
+      });
+    </script>
+  </body>
+</html>

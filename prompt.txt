@@ -1,0 +1,19 @@
+Your task is to build a ChatGPT App named "FFMPEG Video and Audio Tools" by referencing the provided documentation files.
+
+**User Experience:**
+
+1. A user types: `@NeonVideo Make a Music Video`
+2. 2. Based on the input we will call the APi with the description of the video in the prompt.
+3. The user can also type `@NeonVideo Help` to know all the available commands
+4. The user will need to authenticate on NeonVideo.ai to access their account and use their credits to make api calls.
+5. The user can see the generated video in a video player.
+
+
+
+**Documentation:**
+
+To build this app, you must refer to the following markdown files for all technical implementation details:
+
+- **`APPS_SDK.md`:** For understanding the overall architecture, the `window.openai` API, and how custom UI components work.
+- **`MCP_TS_SDK.md`:** For the specific implementation details of the Node.js/TypeScript MCP Server, including how to register tools and structure the server.
+- **`API_DOCS.md`:** For the specification of the external API you need to call. This file explains the endpoints, required headers (including `Authorization`), and its request/response format.
