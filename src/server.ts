@@ -126,7 +126,7 @@ const summarizeToken = (token: string): string => {
   }
   const lead = token.slice(0, 12);
   const tail = token.slice(-8);
-  return `${lead}…${tail}`;
+  return `${lead}...${tail}`;
 };
 
 const loadWidgetTemplate = (): string => {
