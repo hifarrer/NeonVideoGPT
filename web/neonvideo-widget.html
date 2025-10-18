@@ -283,7 +283,8 @@
           timerId: null,
           projectId: null,
           startedAt: null,
-          attempts: 0
+          attempts: 0,
+          errorCount: 0
         },
         progress: {
           timerId: null,
@@ -295,6 +296,7 @@
 
       const AUTO_REFRESH_INTERVAL_MS = 15000;
       const AUTO_REFRESH_MAX_MS = 30 * 60 * 1000;
+      const AUTO_REFRESH_MAX_ERRORS = 3;
       const PROGRESS_INTERVAL_MS = 60 * 1000;
       const PROGRESS_INCREMENT = 10;
       const PROGRESS_MAX = 100;
@@ -375,6 +377,7 @@
         state.autoRefresh.projectId = null;
         state.autoRefresh.startedAt = null;
         state.autoRefresh.attempts = 0;
+        state.autoRefresh.errorCount = 0;
       };
 
       const scheduleAutoRefresh = (projectId) => {
@@ -388,10 +391,12 @@
           cancelAutoRefresh();
           state.autoRefresh.projectId = projectId;
           state.autoRefresh.startedAt = now;
+          state.autoRefresh.errorCount = 0;
         }
 
         if (!state.autoRefresh.startedAt) {
           state.autoRefresh.startedAt = now;
+          state.autoRefresh.errorCount = 0;
         }
 
         const elapsed = now - state.autoRefresh.startedAt;
@@ -430,6 +435,7 @@
           const isActive = next.status !== "complete" && next.status !== "error";
           if (isActive) {
             startProgressTracking(next.projectId);
+            state.autoRefresh.errorCount = 0;
             scheduleAutoRefresh(next.projectId);
           } else {
             cancelAutoRefresh();
@@ -890,6 +896,13 @@
     </script>
   </body>
 </html>
+
+
+
+
+
+
+
 
 
 

@@ -543,6 +543,31 @@ server.registerTool(
           payload = null;
         }
 
+        if (response.status === 404) {
+          const pendingProjectId = actionInput.projectId ?? "";
+          const pendingContent: NeonVideoStructuredContent = {
+            view: "status",
+            projectId: pendingProjectId,
+            prompt: pendingProjectId,
+            message: "NeonVideo.AI is still preparing this project. Retrying shortly.",
+            status: "queued",
+            pollUrl: toAbsoluteUrl(`${PROJECT_ENDPOINT}/${actionInput.projectId}`),
+            checkedAt: nowIso(),
+            finalVideoUrl: null,
+            audioUrl: null
+          };
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: "NeonVideo.AI is still spinning up this project. I'll keep checking automatically."
+              }
+            ],
+            structuredContent: pendingContent
+          };
+        }
+
         if (!response.ok || !payload) {
           const isUnauthorized = response.status === 401 || response.status === 403;
           const errorDetail: NeonVideoErrorDetail = {
@@ -862,6 +887,7 @@ app
     console.error(`[${APP_NAME}] MCP server encountered an error`, error);
     process.exit(1);
   });
+
 
 
 
