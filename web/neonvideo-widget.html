@@ -157,6 +157,37 @@
         gap: 12px;
       }
 
+      .nv-progress {
+        margin-top: 12px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .nv-progress-track {
+        position: relative;
+        width: 100%;
+        height: 10px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.25);
+        overflow: hidden;
+      }
+
+      .nv-progress-fill {
+        position: absolute;
+        inset: 0;
+        transform-origin: left center;
+        background: linear-gradient(135deg, rgba(34, 211, 238, 0.85), rgba(99, 102, 241, 0.9));
+        box-shadow: 0 6px 18px rgba(99, 102, 241, 0.35);
+      }
+
+      .nv-progress-text {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        color: rgba(148, 163, 184, 0.9);
+        text-transform: uppercase;
+      }
+
       .nv-group {
         display: grid;
         gap: 6px;
@@ -240,16 +271,152 @@
       const root = document.getElementById("neonvideo-root");
 
       const defaultWidgetState = {
-        lastPrompt: "",
-        lastProjectId: ""
+        lastPrompt: ""
       };
 
       const state = {
         toolOutput: openai.toolOutput ?? null,
         widgetState: { ...defaultWidgetState, ...(openai.widgetState ?? {}) },
         pendingAction: null,
-        authToken: "",
-        localError: null
+        localError: null,
+        autoRefresh: {
+          timerId: null,
+          projectId: null,
+          startedAt: null,
+          attempts: 0
+        },
+        progress: {
+          timerId: null,
+          projectId: null,
+          value: 0,
+          startedAt: null
+        }
+      };
+
+      const AUTO_REFRESH_INTERVAL_MS = 15000;
+      const AUTO_REFRESH_MAX_MS = 30 * 60 * 1000;
+      const PROGRESS_INTERVAL_MS = 60 * 1000;
+      const PROGRESS_INCREMENT = 10;
+      const PROGRESS_MAX = 100;
+      const MIN_PROMPT_WORDS = 8;
+      const MIN_PROMPT_LENGTH = 60;
+      const PROMPT_TEMPLATE_TEXT = "Template: Create a music video of [Character] [Video description]";
+      const PROMPT_EXAMPLE_TEXT = "Example: Create a music video of a 3D animated cowboy mouse living on a farm.";
+      const PROMPT_GUIDANCE_MESSAGE = `Please share a detailed prompt for NeonVideo.AI.\n${PROMPT_TEMPLATE_TEXT}\n${PROMPT_EXAMPLE_TEXT}`;
+
+      const promptNeedsMoreDetail = (value) => {
+        const normalized = value.trim();
+        if (!normalized) {
+          return true;
+        }
+        const wordCount = normalized.split(/\s+/).filter((word) => word.length > 0).length;
+        return wordCount < MIN_PROMPT_WORDS && normalized.length < MIN_PROMPT_LENGTH;
+      };
+
+      const stopProgressTimer = () => {
+        if (state.progress.timerId) {
+          clearInterval(state.progress.timerId);
+        }
+        state.progress.timerId = null;
+      };
+
+      const resetProgressTracking = () => {
+        stopProgressTimer();
+        state.progress.projectId = null;
+        state.progress.value = 0;
+        state.progress.startedAt = null;
+      };
+
+      const startProgressTracking = (projectId) => {
+        if (!projectId) {
+          resetProgressTracking();
+          return;
+        }
+
+        const now = Date.now();
+        if (state.progress.projectId !== projectId) {
+          resetProgressTracking();
+          state.progress.projectId = projectId;
+          state.progress.startedAt = now;
+          state.progress.value = PROGRESS_INCREMENT;
+        } else if (!state.progress.startedAt) {
+          state.progress.startedAt = now;
+        }
+
+        if (state.progress.value < PROGRESS_INCREMENT) {
+          state.progress.value = PROGRESS_INCREMENT;
+        }
+
+        if (state.progress.value >= PROGRESS_MAX) {
+          stopProgressTimer();
+          return;
+        }
+
+        if (state.progress.timerId) {
+          return;
+        }
+
+        state.progress.timerId = setInterval(() => {
+          if (state.progress.value >= PROGRESS_MAX) {
+            stopProgressTimer();
+            return;
+          }
+
+          state.progress.value = Math.min(PROGRESS_MAX, state.progress.value + PROGRESS_INCREMENT);
+          render();
+        }, PROGRESS_INTERVAL_MS);
+      };
+
+      const cancelAutoRefresh = () => {
+        if (state.autoRefresh.timerId) {
+          clearTimeout(state.autoRefresh.timerId);
+        }
+        state.autoRefresh.timerId = null;
+        state.autoRefresh.projectId = null;
+        state.autoRefresh.startedAt = null;
+        state.autoRefresh.attempts = 0;
+      };
+
+      const scheduleAutoRefresh = (projectId) => {
+        if (!projectId) {
+          cancelAutoRefresh();
+          return;
+        }
+
+        const now = Date.now();
+        if (state.autoRefresh.projectId !== projectId) {
+          cancelAutoRefresh();
+          state.autoRefresh.projectId = projectId;
+          state.autoRefresh.startedAt = now;
+        }
+
+        if (!state.autoRefresh.startedAt) {
+          state.autoRefresh.startedAt = now;
+        }
+
+        const elapsed = now - state.autoRefresh.startedAt;
+        if (elapsed >= AUTO_REFRESH_MAX_MS) {
+          cancelAutoRefresh();
+          stopProgressTimer();
+          state.localError =
+            "Automatic refresh paused after 30 minutes. Generation may still be in progress; check the NeonVideo dashboard for the latest status.";
+          render();
+          return;
+        }
+
+        if (state.autoRefresh.timerId || state.pendingAction === "check") {
+          return;
+        }
+
+        state.autoRefresh.timerId = setTimeout(async () => {
+          state.autoRefresh.timerId = null;
+          state.autoRefresh.attempts += 1;
+          try {
+            await handleStatusCheck(projectId, { auto: true });
+          } catch (error) {
+            console.error("[NeonVideo.AI] Auto-refresh failed", error);
+          }
+        }, AUTO_REFRESH_INTERVAL_MS);
       };
 
       const setWidgetState = (next) => {
@@ -259,9 +426,22 @@
 
       const setToolOutput = (next) => {
         state.toolOutput = next ?? null;
-        if (next?.view === "status" && state.widgetState.lastProjectId !== next.projectId) {
-          state.widgetState = { ...state.widgetState, lastProjectId: next.projectId };
-          openai.setWidgetState?.(state.widgetState);
+        if (next?.view === "status") {
+          const isActive = next.status !== "complete" && next.status !== "error";
+          if (isActive) {
+            startProgressTracking(next.projectId);
+            scheduleAutoRefresh(next.projectId);
+          } else {
+            cancelAutoRefresh();
+            if (next.status === "complete") {
+              state.progress.projectId = next.projectId;
+              state.progress.value = PROGRESS_MAX;
+            }
+            stopProgressTimer();
+          }
+        } else {
+          cancelAutoRefresh();
+          resetProgressTracking();
         }
         render();
       };
@@ -285,12 +465,17 @@
 
       const handleGenerate = async (prompt) => {
         clearLocalError();
+        const trimmedPrompt = prompt.trim();
+        if (!trimmedPrompt || promptNeedsMoreDetail(trimmedPrompt)) {
+          state.localError = PROMPT_GUIDANCE_MESSAGE;
+          render();
+          return;
+        }
         setPending("generate");
         try {
           const response = await openai.callTool?.("neonvideo_action", {
             action: "generate_video",
-            prompt,
-            authToken: state.authToken || undefined
+            prompt: trimmedPrompt
           });
 
           if (response?.structuredContent) {
@@ -304,24 +489,39 @@
         }
       };
 
-      const handleStatusCheck = async (projectId) => {
-        clearLocalError();
-        setPending("check");
+      const handleStatusCheck = async (projectId, options = {}) => {
+        const { auto = false } = options;
+        if (!auto) {
+          clearLocalError();
+          cancelAutoRefresh();
+          setPending("check");
+        }
         try {
           const response = await openai.callTool?.("neonvideo_action", {
             action: "check_status",
-            projectId,
-            authToken: state.authToken || undefined
+            projectId
           });
 
           if (response?.structuredContent) {
             setToolOutput(response.structuredContent);
           }
         } catch (error) {
-          state.localError = error instanceof Error ? error.message : String(error);
+          const message = error instanceof Error ? error.message : String(error);
+          if (auto) {
+            cancelAutoRefresh();
+            stopProgressTimer();
+            state.localError =
+              message ||
+              "Automatic refresh paused due to an error. Generation may still be in progress; try again in a moment or check the NeonVideo dashboard.";
+            render();
+          } else {
+            state.localError = message;
+          }
         } finally {
-          setPending(null);
-          render();
+          if (!auto) {
+            setPending(null);
+            render();
+          }
         }
       };
 
@@ -399,6 +599,35 @@
         message.innerHTML = `<strong>Message:</strong> ${content.message}`;
         project.append(projectId, prompt, message);
         statusGrid.appendChild(project);
+
+        const progressProjectMatch = state.progress.projectId === content.projectId;
+        const currentProgressValue = Math.min(PROGRESS_MAX, Math.round(state.progress.value ?? 0));
+        const showProgressBar =
+          progressProjectMatch &&
+          (content.status === "queued" || content.status === "generating" || currentProgressValue >= PROGRESS_MAX);
+
+        if (showProgressBar) {
+          const progress = document.createElement("div");
+          progress.className = "nv-progress";
+
+          const progressTrack = document.createElement("div");
+          progressTrack.className = "nv-progress-track";
+
+          const progressFill = document.createElement("div");
+          progressFill.className = "nv-progress-fill";
+          progressFill.style.width = `${currentProgressValue}%`;
+          progressTrack.appendChild(progressFill);
+
+          const progressText = document.createElement("div");
+          progressText.className = "nv-progress-text";
+          progressText.textContent =
+            currentProgressValue >= PROGRESS_MAX
+              ? "Estimated progress: 100% (awaiting final assets)"
+              : `Estimated progress: ${currentProgressValue}% (auto-refreshing every 15 seconds)`;
+
+          progress.append(progressTrack, progressText);
+          statusGrid.appendChild(progress);
+        }
 
         const timing = document.createElement("div");
         timing.className = "nv-note";
@@ -581,8 +810,8 @@
         generateForm.addEventListener("submit", (event) => {
           event.preventDefault();
           const prompt = state.widgetState.lastPrompt.trim();
-          if (!prompt) {
-            state.localError = "Describe the music video before starting generation.";
+          if (!prompt || promptNeedsMoreDetail(prompt)) {
+            state.localError = PROMPT_GUIDANCE_MESSAGE;
             render();
             return;
           }
@@ -591,15 +820,20 @@
 
         const promptLabel = document.createElement("label");
         promptLabel.className = "nv-label";
-        promptLabel.textContent = "Describe your music video";
+        promptLabel.textContent = "Describe your music video (include character, setting, and vibe)";
 
         const promptTextarea = document.createElement("textarea");
-        promptTextarea.placeholder = "Example: Make a music video about a cowboy cat living on a farm.";
+        promptTextarea.placeholder = "Example: Create a music video of a 3D animated cowboy mouse living on a farm.";
         promptTextarea.value = state.widgetState.lastPrompt ?? "";
         promptTextarea.addEventListener("input", (event) => {
           const value = event.target.value;
           setWidgetState({ lastPrompt: value });
         });
+
+        const promptHint = document.createElement("div");
+        promptHint.className = "nv-note";
+        promptHint.style.marginTop = "8px";
+        promptHint.textContent = `${PROMPT_TEMPLATE_TEXT} | ${PROMPT_EXAMPLE_TEXT}`;
 
         const startButton = document.createElement("button");
         startButton.type = "submit";
@@ -607,63 +841,10 @@
           state.pendingAction === "generate" ? "Starting NeonVideo…" : "Start music video";
         startButton.disabled = state.pendingAction === "generate";
 
-        generateForm.append(promptLabel, promptTextarea, startButton);
+        generateForm.append(promptLabel, promptTextarea, promptHint, startButton);
         actions.appendChild(generateForm);
 
-        const statusForm = document.createElement("form");
-        statusForm.addEventListener("submit", (event) => {
-          event.preventDefault();
-          const projectId = state.widgetState.lastProjectId.trim();
-          if (!projectId) {
-            state.localError = "Enter a project ID to check status.";
-            render();
-            return;
-          }
-          handleStatusCheck(projectId);
-        });
-
-        const statusLabel = document.createElement("label");
-        statusLabel.className = "nv-label";
-        statusLabel.textContent = "Check an existing project";
-
-        const projectInput = document.createElement("input");
-        projectInput.type = "text";
-        projectInput.placeholder = "Project ID (UUID)";
-        const currentProjectId =
-          state.toolOutput?.view === "status" ? state.toolOutput.projectId : state.widgetState.lastProjectId ?? "";
-        projectInput.value = currentProjectId;
-        projectInput.addEventListener("input", (event) => {
-          const value = event.target.value;
-          setWidgetState({ lastProjectId: value });
-        });
-
-        const checkButton = document.createElement("button");
-        checkButton.type = "submit";
-        checkButton.textContent = state.pendingAction === "check" ? "Refreshing…" : "Check status";
-        checkButton.disabled = state.pendingAction === "check";
-
-        statusForm.append(statusLabel, projectInput, checkButton);
-        actions.appendChild(statusForm);
-
-        const authDetails = document.createElement("details");
-        const summary = document.createElement("summary");
-        summary.textContent = "Need to use a different auth token?";
-        authDetails.appendChild(summary);
-        const authCopy = document.createElement("div");
-        authCopy.className = "nv-note";
-        authCopy.style.margin = "8px 0";
-        authCopy.textContent =
-          "Paste a temporary NeonVideo auth token below to override the server default for this session.";
-        const authInput = document.createElement("input");
-        authInput.type = "password";
-        authInput.placeholder = "Bearer token (kept only in this view)";
-        authInput.value = state.authToken;
-        authInput.addEventListener("input", (event) => {
-          state.authToken = event.target.value.trim();
-        });
-        authDetails.append(authCopy, authInput);
-        actions.appendChild(authDetails);
-
+        
         actionsCard.appendChild(actions);
         container.appendChild(actionsCard);
 
@@ -709,3 +890,10 @@
     </script>
   </body>
 </html>
+
+
+
+
+
+
+

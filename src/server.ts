@@ -430,16 +430,16 @@ server.registerTool(
         timestamp: nowIso(),
         commands: [
           {
+            syntax: "@NeonVideo Create a music video of <description>",
+            description: "Start a new NeonVideo project using the provided prompt."
+          },
+          {
             syntax: "@NeonVideo Make a music video about <description>",
             description: "Start a new NeonVideo project using the provided prompt."
           },
           {
             syntax: "@NeonVideo Help",
             description: "Show available commands and authentication guidance."
-          },
-          {
-            syntax: "@NeonVideo Check <projectId>",
-            description: "Fetch the latest status for an existing NeonVideo project."
           }
         ],
         usageNotes: [
@@ -447,7 +447,8 @@ server.registerTool(
             ? "Complete the NeonVideo OAuth prompt in ChatGPT when requested; this issues an access token automatically."
             : "Authenticate at https://neonvideo.ai/ to obtain an auth token before launching new videos.",
           "Each music video consumes credits; ensure your NeonVideo account has enough balance.",
-          "Generation typically completes within 2-5 minutes; use the status action to refresh."
+          "Generations typically finish in about 10 minutes; the widget auto-refreshes progress for up to 30 minutes.",
+          "For best results, follow the template: Create a music video of [Character] [Video description]."
         ]
       };
 
@@ -455,7 +456,7 @@ server.registerTool(
         content: [
           {
             type: "text",
-            text: "Here are the NeonVideo.AI commands you can use. Launch a video or check status using the widget below."
+            text: "Here are the NeonVideo.AI commands you can use. Launch a video using the widget below."
           }
         ],
         structuredContent: helpContent
@@ -474,6 +475,29 @@ server.registerTool(
           structuredContent: asErrorContent({
             type: "validation",
             message: "Prompt is required to create a NeonVideo project."
+          })
+        };
+      }
+
+      const normalizedPrompt = actionInput.prompt.trim();
+      const promptWordCount = normalizedPrompt.split(/\s+/).filter((word) => word.length > 0).length;
+      const promptHasDetail = promptWordCount >= 8 || normalizedPrompt.length >= 60;
+      if (!promptHasDetail) {
+        const guidance =
+          "Template: Create a music video of [Character] [Video description]\nExample: Create a music video of a 3D animated cowboy mouse living on a farm.";
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                "Please share a more descriptive prompt for NeonVideo.AI.\n" +
+                guidance
+            }
+          ],
+          structuredContent: asErrorContent({
+            type: "validation",
+            message: "Prompt needs more detail.",
+            details: guidance
           })
         };
       }
