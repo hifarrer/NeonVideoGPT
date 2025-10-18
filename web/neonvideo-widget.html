@@ -158,34 +158,11 @@
       }
 
       .nv-progress {
-        margin-top: 12px;
-        display: grid;
-        gap: 6px;
-      }
-
-      .nv-progress-track {
-        position: relative;
-        width: 100%;
-        height: 10px;
-        border-radius: 999px;
-        background: rgba(148, 163, 184, 0.25);
-        overflow: hidden;
-      }
-
-      .nv-progress-fill {
-        position: absolute;
-        inset: 0;
-        transform-origin: left center;
-        background: linear-gradient(135deg, rgba(34, 211, 238, 0.85), rgba(99, 102, 241, 0.9));
-        box-shadow: 0 6px 18px rgba(99, 102, 241, 0.35);
-      }
-
-      .nv-progress-text {
+        margin-top: 8px;
         font-size: 12px;
         font-weight: 600;
         letter-spacing: 0.01em;
         color: rgba(148, 163, 184, 0.9);
-        text-transform: uppercase;
       }
 
       .nv-group {
@@ -613,26 +590,13 @@
           (content.status === "queued" || content.status === "generating" || currentProgressValue >= PROGRESS_MAX);
 
         if (showProgressBar) {
-          const progress = document.createElement("div");
-          progress.className = "nv-progress";
-
-          const progressTrack = document.createElement("div");
-          progressTrack.className = "nv-progress-track";
-
-          const progressFill = document.createElement("div");
-          progressFill.className = "nv-progress-fill";
-          progressFill.style.width = `${currentProgressValue}%`;
-          progressTrack.appendChild(progressFill);
-
           const progressText = document.createElement("div");
-          progressText.className = "nv-progress-text";
+          progressText.className = "nv-progress";
           progressText.textContent =
             currentProgressValue >= PROGRESS_MAX
               ? "Estimated progress: 100% (awaiting final assets)"
               : `Estimated progress: ${currentProgressValue}% (auto-refreshing every 15 seconds)`;
-
-          progress.append(progressTrack, progressText);
-          statusGrid.appendChild(progress);
+          statusGrid.appendChild(progressText);
         }
 
         const timing = document.createElement("div");

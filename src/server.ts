@@ -35,7 +35,7 @@ const WEB_DIR = path.join(ROOT_DIR, "web");
 const APP_NAME = "NeonVideo.AI";
 const API_BASE_URL = process.env.NEONVIDEO_API_BASE_URL ?? "https://neonvideo.ai";
 const CREATE_ENDPOINT = "/api/neon-single-prompt";
-const PROJECT_ENDPOINT = "/api/projects";
+const STATUS_ENDPOINT = "/api/neon-single-prompt/status";
 const REQUEST_TIMEOUT_MS = Number.parseInt(process.env.NEONVIDEO_API_TIMEOUT_MS ?? "60000", 10);
 
 const DEFAULT_AUTH_TOKEN = process.env.NEONVIDEO_AUTH_TOKEN;
@@ -543,31 +543,6 @@ server.registerTool(
           payload = null;
         }
 
-        if (response.status === 404) {
-          const pendingProjectId = actionInput.projectId ?? "";
-          const pendingContent: NeonVideoStructuredContent = {
-            view: "status",
-            projectId: pendingProjectId,
-            prompt: pendingProjectId,
-            message: "NeonVideo.AI is still preparing this project. Retrying shortly.",
-            status: "queued",
-            pollUrl: toAbsoluteUrl(`${PROJECT_ENDPOINT}/${actionInput.projectId}`),
-            checkedAt: nowIso(),
-            finalVideoUrl: null,
-            audioUrl: null
-          };
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: "NeonVideo.AI is still spinning up this project. I'll keep checking automatically."
-              }
-            ],
-            structuredContent: pendingContent
-          };
-        }
-
         if (!response.ok || !payload) {
           const isUnauthorized = response.status === 401 || response.status === 403;
           const errorDetail: NeonVideoErrorDetail = {
@@ -625,7 +600,7 @@ server.registerTool(
           prompt: actionInput.prompt,
           message: String(payload.message ?? "Video generation started"),
           status: "queued",
-          pollUrl: toAbsoluteUrl(`${PROJECT_ENDPOINT}/${projectId}`),
+          pollUrl: toAbsoluteUrl(`${STATUS_ENDPOINT}/${projectId}`),
           checkedAt: nowIso()
         };
 
@@ -697,7 +672,7 @@ server.registerTool(
       }
 
       try {
-        const response = await withTimeout(toAbsoluteUrl(`${PROJECT_ENDPOINT}/${actionInput.projectId}`), {
+        const response = await withTimeout(toAbsoluteUrl(`${STATUS_ENDPOINT}/${actionInput.projectId}`), {
           method: "GET",
           headers: buildHeaders(effectiveAuthToken)
         });
@@ -743,26 +718,46 @@ server.registerTool(
           };
         }
 
-        const status = String(payload.generationStatus ?? payload.status ?? "generating");
-        const normalizedStatus =
-          status === "completed" || payload.isCompleted === true
-            ? "complete"
-            : status === "failed"
-            ? "error"
-            : "generating";
+        const rawStatusValue = String((payload.status ?? payload.state ?? payload.generationStatus ?? "pending")).toLowerCase();
+        const statusFromApi = rawStatusValue;
+        let normalizedStatus: "queued" | "generating" | "complete" | "error";
+        if (payload.isCompleted === true || ["completed", "complete", "done", "finished"].includes(statusFromApi)) {
+          normalizedStatus = "complete";
+        } else if (["failed", "error", "cancelled", "canceled"].includes(statusFromApi)) {
+          normalizedStatus = "error";
+        } else if (["queued", "pending", "waiting"].includes(statusFromApi)) {
+          normalizedStatus = "queued";
+        } else {
+          normalizedStatus = "generating";
+        }
 
+        const finalVideoUrl = typeof payload.finalVideoUrl === "string"
+          ? payload.finalVideoUrl
+          : typeof payload.videoUrl === "string"
+          ? payload.videoUrl
+          : null;
+
+        if (finalVideoUrl && normalizedStatus !== "error") {
+          normalizedStatus = "complete";
+        }
+
+        const projectIdValue = String(payload.id ?? actionInput.projectId);
+        const promptValue = String(payload.description ?? payload.prompt ?? payload.title ?? actionInput.projectId);
+        const messageValue = typeof payload.message === "string" ? payload.message : `NeonVideo.AI status: ${statusFromApi || "pending"}`;
         const statusContent: NeonVideoStructuredContent = {
           view: "status",
-          projectId: String(payload.id ?? actionInput.projectId),
-          prompt: String(payload.title ?? actionInput.projectId),
-          message: `NeonVideo.AI status: ${status}`,
+          projectId: projectIdValue,
+          prompt: promptValue,
+          message: messageValue,
           status: normalizedStatus,
-          pollUrl: toAbsoluteUrl(`${PROJECT_ENDPOINT}/${actionInput.projectId}`),
+          pollUrl: toAbsoluteUrl(`${STATUS_ENDPOINT}/${actionInput.projectId}`),
           checkedAt: nowIso(),
-          finalVideoUrl: (payload.finalVideoUrl as string | null | undefined) ?? null,
-          audioUrl: (payload.audioUrl as string | null | undefined) ?? null,
+          finalVideoUrl: finalVideoUrl ?? null,
+          audioUrl: typeof payload.audioUrl === "string" ? payload.audioUrl : typeof payload.songUrl === "string" ? payload.songUrl : null,
           sceneImages: Array.isArray(payload.sceneImages)
             ? (payload.sceneImages as Array<string>).filter((value) => typeof value === "string")
+            : Array.isArray((payload.frames as unknown[]))
+            ? (payload.frames as Array<string>).filter((value) => typeof value === "string")
             : undefined,
           scenePrompts: Array.isArray(payload.scenePrompts)
             ? (payload.scenePrompts as Array<string>).filter((value) => typeof value === "string")
@@ -788,7 +783,7 @@ server.registerTool(
               text:
                 normalizedStatus === "complete"
                   ? `Project ${statusContent.projectId} is complete. Enjoy your NeonVideo!`
-                  : `Latest status from NeonVideo.AI: ${status}.`
+                  : `Latest status from NeonVideo.AI: ${statusFromApi || "pending"}.`
             }
           ],
           structuredContent: statusContent
@@ -887,6 +882,8 @@ app
     console.error(`[${APP_NAME}] MCP server encountered an error`, error);
     process.exit(1);
   });
+
+
 
 
 
