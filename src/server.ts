@@ -483,15 +483,12 @@ server.registerTool(
       const promptWordCount = normalizedPrompt.split(/\s+/).filter((word) => word.length > 0).length;
       const promptHasDetail = promptWordCount >= 8 || normalizedPrompt.length >= 60;
       if (!promptHasDetail) {
-        const guidance =
-          "Template: Create a music video of [Character] [Video description]\nExample: Create a music video of a 3D animated cowboy mouse living on a farm.";
+        const guidance = "Template: Create a music video of [Character] [Video description]\nExample: Create a music video of a 3D animated cowboy mouse living on a farm.";
         return {
           content: [
             {
               type: "text",
-              text:
-                "Please share a more descriptive prompt for NeonVideo.AI.\n" +
-                guidance
+              text: "Please share a more descriptive prompt for NeonVideo.AI.\n" + guidance
             }
           ],
           structuredContent: asErrorContent({
@@ -528,14 +525,17 @@ server.registerTool(
       }
 
       try {
+        const promptPreview = normalizedPrompt.slice(0, 120).replace(/\s+/g, " ").trim();
+        const createStarted = Date.now();
+        console.log(`[${APP_NAME}] generate_video start prompt="${promptPreview}"`);
+
         const response = await withTimeout(toAbsoluteUrl(CREATE_ENDPOINT), {
           method: "POST",
           headers: buildHeaders(effectiveAuthToken),
-          body: JSON.stringify({ prompt: actionInput.prompt })
+          body: JSON.stringify({ prompt: normalizedPrompt })
         });
 
         const rawText = await response.text();
-
         let payload: Record<string, unknown> | null = null;
         try {
           payload = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : null;
@@ -544,6 +544,7 @@ server.registerTool(
         }
 
         if (!response.ok || !payload) {
+          console.warn(`[${APP_NAME}] generate_video failed status=${response.status}`);
           const isUnauthorized = response.status === 401 || response.status === 403;
           const errorDetail: NeonVideoErrorDetail = {
             type: isUnauthorized ? "auth" : "api",
@@ -577,8 +578,9 @@ server.registerTool(
         }
 
         const projectId = String(payload.projectId ?? "");
-        const success = payload.success === true;
+        const success = payload.success === true || projectId.length > 0;
         if (!projectId || !success) {
+          console.warn(`[${APP_NAME}] generate_video missing projectId response=${rawText}`);
           return {
             content: [
               {
@@ -594,10 +596,13 @@ server.registerTool(
           };
         }
 
+        const elapsedMs = Date.now() - createStarted;
+        console.log(`[${APP_NAME}] generate_video accepted projectId=${projectId} (${elapsedMs}ms)`);
+
         const statusContent: NeonVideoStructuredContent = {
           view: "status",
           projectId,
-          prompt: actionInput.prompt,
+          prompt: normalizedPrompt,
           message: String(payload.message ?? "Video generation started"),
           status: "queued",
           pollUrl: toAbsoluteUrl(`${STATUS_ENDPOINT}/${projectId}`),
@@ -614,6 +619,7 @@ server.registerTool(
           structuredContent: statusContent
         };
       } catch (error) {
+        console.error(`[${APP_NAME}] generate_video encountered error`, error);
         const errorDetail: NeonVideoErrorDetail = {
           type: "network",
           message: error instanceof Error ? error.message : "NeonVideo API request failed."
@@ -672,6 +678,9 @@ server.registerTool(
       }
 
       try {
+        const pollStarted = Date.now();
+        console.log(`[${APP_NAME}] check_status projectId=${actionInput.projectId}`);
+
         const response = await withTimeout(toAbsoluteUrl(`${STATUS_ENDPOINT}/${actionInput.projectId}`), {
           method: "GET",
           headers: buildHeaders(effectiveAuthToken)
@@ -686,6 +695,7 @@ server.registerTool(
         }
 
         if (!response.ok || !payload) {
+          console.warn(`[${APP_NAME}] check_status failed projectId=${actionInput.projectId} status=${response.status}`);
           const isUnauthorized = response.status === 401 || response.status === 403;
           const errorDetail: NeonVideoErrorDetail = {
             type: isUnauthorized ? "auth" : "api",
@@ -718,8 +728,8 @@ server.registerTool(
           };
         }
 
-        const rawStatusValue = String((payload.status ?? payload.state ?? payload.generationStatus ?? "pending")).toLowerCase();
-        const statusFromApi = rawStatusValue;
+        const rawStatusSource = payload.status ?? payload.state ?? payload.generationStatus ?? "pending";
+        const statusFromApi = String(rawStatusSource).toLowerCase();
         let normalizedStatus: "queued" | "generating" | "complete" | "error";
         if (payload.isCompleted === true || ["completed", "complete", "done", "finished"].includes(statusFromApi)) {
           normalizedStatus = "complete";
@@ -731,11 +741,12 @@ server.registerTool(
           normalizedStatus = "generating";
         }
 
-        const finalVideoUrl = typeof payload.finalVideoUrl === "string"
-          ? payload.finalVideoUrl
-          : typeof payload.videoUrl === "string"
-          ? payload.videoUrl
-          : null;
+        const finalVideoUrl =
+          typeof payload.finalVideoUrl === "string"
+            ? payload.finalVideoUrl
+            : typeof payload.videoUrl === "string"
+            ? payload.videoUrl
+            : null;
 
         if (finalVideoUrl && normalizedStatus !== "error") {
           normalizedStatus = "complete";
@@ -743,7 +754,9 @@ server.registerTool(
 
         const projectIdValue = String(payload.id ?? actionInput.projectId);
         const promptValue = String(payload.description ?? payload.prompt ?? payload.title ?? actionInput.projectId);
-        const messageValue = typeof payload.message === "string" ? payload.message : `NeonVideo.AI status: ${statusFromApi || "pending"}`;
+        const messageValue =
+          typeof payload.message === "string" ? payload.message : `NeonVideo.AI status: ${statusFromApi || "pending"}`;
+
         const statusContent: NeonVideoStructuredContent = {
           view: "status",
           projectId: projectIdValue,
@@ -753,10 +766,15 @@ server.registerTool(
           pollUrl: toAbsoluteUrl(`${STATUS_ENDPOINT}/${actionInput.projectId}`),
           checkedAt: nowIso(),
           finalVideoUrl: finalVideoUrl ?? null,
-          audioUrl: typeof payload.audioUrl === "string" ? payload.audioUrl : typeof payload.songUrl === "string" ? payload.songUrl : null,
+          audioUrl:
+            typeof payload.audioUrl === "string"
+              ? payload.audioUrl
+              : typeof payload.songUrl === "string"
+              ? payload.songUrl
+              : null,
           sceneImages: Array.isArray(payload.sceneImages)
             ? (payload.sceneImages as Array<string>).filter((value) => typeof value === "string")
-            : Array.isArray((payload.frames as unknown[]))
+            : Array.isArray(payload.frames as unknown[])
             ? (payload.frames as Array<string>).filter((value) => typeof value === "string")
             : undefined,
           scenePrompts: Array.isArray(payload.scenePrompts)
@@ -776,6 +794,11 @@ server.registerTool(
               : undefined
         };
 
+        const pollElapsed = Date.now() - pollStarted;
+        console.log(
+          `[${APP_NAME}] check_status projectId=${statusContent.projectId} raw=${statusFromApi} normalized=${normalizedStatus} finalVideo=${Boolean(finalVideoUrl)} (${pollElapsed}ms)`
+        );
+
         return {
           content: [
             {
@@ -789,6 +812,7 @@ server.registerTool(
           structuredContent: statusContent
         };
       } catch (error) {
+        console.error(`[${APP_NAME}] check_status encountered error`, error);
         const errorDetail: NeonVideoErrorDetail = {
           type: "network",
           message: error instanceof Error ? error.message : "Failed to contact NeonVideo.AI."
@@ -882,6 +906,16 @@ app
     console.error(`[${APP_NAME}] MCP server encountered an error`, error);
     process.exit(1);
   });
+
+
+
+
+
+
+
+
+
+
 
 
 

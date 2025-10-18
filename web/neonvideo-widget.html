@@ -248,7 +248,8 @@
       const root = document.getElementById("neonvideo-root");
 
       const defaultWidgetState = {
-        lastPrompt: ""
+        lastPrompt: "",
+        lastProjectId: ""
       };
 
       const state = {
@@ -274,6 +275,8 @@
       const AUTO_REFRESH_INTERVAL_MS = 15000;
       const AUTO_REFRESH_MAX_MS = 30 * 60 * 1000;
       const AUTO_REFRESH_MAX_ERRORS = 3;
+      const AUTO_REFRESH_BACKOFF_BASE_MS = 15000;
+      const AUTO_REFRESH_BACKOFF_JITTER_MS = 5000;
       const PROGRESS_INTERVAL_MS = 60 * 1000;
       const PROGRESS_INCREMENT = 10;
       const PROGRESS_MAX = 100;
@@ -386,9 +389,14 @@
           return;
         }
 
-        if (state.autoRefresh.timerId || state.pendingAction === "check") {
+        if (state.autoRefresh.timerId || state.pendingAction === "check" || state.pendingAction === "manual-refresh") {
           return;
         }
+
+        const attemptGroup = Math.min(3, Math.floor(state.autoRefresh.attempts / 4));
+        const backoffDelay = AUTO_REFRESH_BACKOFF_BASE_MS * (1 + attemptGroup);
+        const jitter = Math.floor(Math.random() * AUTO_REFRESH_BACKOFF_JITTER_MS);
+        const delay = backoffDelay + jitter;
 
         state.autoRefresh.timerId = setTimeout(async () => {
           state.autoRefresh.timerId = null;
@@ -398,7 +406,7 @@
           } catch (error) {
             console.error("[NeonVideo.AI] Auto-refresh failed", error);
           }
-        }, AUTO_REFRESH_INTERVAL_MS);
+        }, delay);
       };
 
       const setWidgetState = (next) => {
@@ -408,10 +416,18 @@
 
       const setToolOutput = (next) => {
         state.toolOutput = next ?? null;
+        if (next) {
+          console.log("[NeonVideo.AI Widget] Received structured output", next.view, next.status ?? "-");
+        }
+
         if (next?.view === "status") {
           const isActive = next.status !== "complete" && next.status !== "error";
           if (isActive) {
             startProgressTracking(next.projectId);
+            if (state.widgetState.lastProjectId !== next.projectId) {
+              state.widgetState = { ...state.widgetState, lastProjectId: next.projectId };
+              openai.setWidgetState?.(state.widgetState);
+            }
             state.autoRefresh.errorCount = 0;
             scheduleAutoRefresh(next.projectId);
           } else {
@@ -473,11 +489,12 @@
       };
 
       const handleStatusCheck = async (projectId, options = {}) => {
-        const { auto = false } = options;
+        const { auto = false, manual = false } = options;
         if (!auto) {
           clearLocalError();
           cancelAutoRefresh();
-          setPending("check");
+          state.pendingAction = manual ? "manual-refresh" : "check";
+          render();
         }
         try {
           const response = await openai.callTool?.("neonvideo_action", {
@@ -491,18 +508,25 @@
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (auto) {
-            cancelAutoRefresh();
-            stopProgressTimer();
-            state.localError =
-              message ||
-              "Automatic refresh paused due to an error. Generation may still be in progress; try again in a moment or check the NeonVideo dashboard.";
+            state.autoRefresh.errorCount += 1;
+            const tooManyErrors = state.autoRefresh.errorCount >= AUTO_REFRESH_MAX_ERRORS;
+            state.localError = message || (tooManyErrors
+              ? "Automatic refresh paused due to repeated errors. Generation may still be in progress; try again later or check the NeonVideo dashboard."
+              : "Waiting on NeonVideo.AI. I will retry shortly.");
             render();
+
+            if (tooManyErrors) {
+              cancelAutoRefresh();
+              stopProgressTimer();
+            } else {
+              scheduleAutoRefresh(projectId);
+            }
           } else {
             state.localError = message;
           }
         } finally {
           if (!auto) {
-            setPending(null);
+            state.pendingAction = null;
             render();
           }
         }
@@ -680,7 +704,7 @@
         const refreshButton = document.createElement("button");
         refreshButton.textContent = "Refresh status";
         refreshButton.type = "button";
-        refreshButton.disabled = state.pendingAction === "check";
+        refreshButton.disabled = state.pendingAction === "check" || state.pendingAction === "manual-refresh";
         refreshButton.addEventListener("click", () => handleStatusCheck(content.projectId));
         refreshRow.appendChild(refreshButton);
 
@@ -821,6 +845,21 @@
         generateForm.append(promptLabel, promptTextarea, promptHint, startButton);
         actions.appendChild(generateForm);
 
+        const refreshButton = document.createElement("button");
+        refreshButton.type = "button";
+        refreshButton.textContent = state.pendingAction === "manual-refresh" ? "Refreshing…" : "Check progress now";
+        refreshButton.disabled = state.pendingAction === "manual-refresh";
+        refreshButton.addEventListener("click", () => {
+          const projectId = state.widgetState.lastProjectId?.trim();
+          if (!projectId) {
+            state.localError = "Launch a video first so I have a project to refresh.";
+            render();
+            return;
+          }
+          handleStatusCheck(projectId, { manual: true });
+        });
+        actions.appendChild(refreshButton);
+
         
         actionsCard.appendChild(actions);
         container.appendChild(actionsCard);
@@ -867,6 +906,17 @@
     </script>
   </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
 
 
 
