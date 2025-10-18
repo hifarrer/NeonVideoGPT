@@ -312,10 +312,17 @@ const oauthMiddleware: RequestHandler = async (req: Request, res: Response, next
     return next();
   } catch (error) {
     if (error instanceof OAuthError) {
+      let debugDescription: string | undefined;
+      let decodedIss: string | undefined;
+      let decodedAud: unknown;
+      let decodedExp: number | undefined;
       if (error.code === "invalid_token") {
         const tokenPreview = summarizeToken(token);
         try {
           const decoded = decodeJwt(token);
+          decodedIss = typeof decoded.iss === "string" ? decoded.iss : undefined;
+          decodedAud = (decoded as Record<string, unknown>).aud ?? undefined;
+          decodedExp = typeof decoded.exp === "number" ? decoded.exp : undefined;
           console.warn(
             `[${APP_NAME}] OAuth verification failed: ${error.message}; token=${tokenPreview}; iss=${decoded.iss}; aud=${JSON.stringify(
               decoded.aud ?? null
@@ -327,8 +334,17 @@ const oauthMiddleware: RequestHandler = async (req: Request, res: Response, next
             decodeError
           );
         }
+        if (!debugDescription) {
+          debugDescription = `token=${tokenPreview}; iss=${decodedIss ?? "undefined"}; aud=${JSON.stringify(
+            decodedAud ?? null
+          )}; exp=${decodedExp ?? "undefined"}`;
+        }
       } else {
         console.warn(`[${APP_NAME}] OAuth verification failed: ${error.message}`);
+      }
+      if (error.code === "invalid_token" && !debugDescription) {
+        const tokenPreview = summarizeToken(token);
+        debugDescription = `token=${tokenPreview}; iss=unknown; aud=unknown; exp=unknown`;
       }
       const challengeError =
         error.code === "missing_token"
@@ -340,6 +356,8 @@ const oauthMiddleware: RequestHandler = async (req: Request, res: Response, next
       const description =
         error.code === "insufficient_scope"
           ? "Access token does not include required NeonVideo scopes."
+          : debugDescription
+          ? `Access token could not be verified (${debugDescription}).`
           : "Access token could not be verified.";
 
       console.warn(`[${APP_NAME}] OAuth verification failed: ${error.message}`);
