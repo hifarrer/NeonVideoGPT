@@ -771,7 +771,14 @@
         const actionsTitle = document.createElement("div");
         actionsTitle.className = "nv-section-title";
         actionsTitle.textContent = "Launch from ChatGPT";
+
+        const versionTag = document.createElement("div");
+        versionTag.className = "nv-note";
+        versionTag.style.marginBottom = "8px";
+        versionTag.textContent = "Version 1.1";
+
         actionsCard.appendChild(actionsTitle);
+        actionsCard.appendChild(versionTag);
 
         const actions = document.createElement("div");
         actions.className = "nv-actions";
@@ -860,6 +867,7 @@
     </script>
   </body>
 </html>
+
 
 
 
